@@ -1,50 +1,84 @@
 import { GeoJSON, Popup, useMap } from 'react-leaflet';
 import { useCallback, useState, useRef } from 'react';
 import { SEVERITY_COLORS } from '../../utils/constants';
+import { getAlertsForTribe } from '../../services/alertMatcher';
 
-const defaultStyle = {
-  fillColor: SEVERITY_COLORS.DEFAULT,
-  fillOpacity: 0.3,
-  color: SEVERITY_COLORS.DEFAULT,
+// US Tribal style (purple accent)
+const usStyle = {
+  fillColor: '#82127c',
+  fillOpacity: 0.25,
+  color: '#82127c',
+  weight: 2,
+  opacity: 0.8
+};
+
+// Canadian First Nations style (teal accent)
+const canadianStyle = {
+  fillColor: '#0a3f56',
+  fillOpacity: 0.25,
+  color: '#2e66be',
   weight: 2,
   opacity: 0.8
 };
 
 const hoverStyle = {
-  fillOpacity: 0.5,
+  fillOpacity: 0.45,
   weight: 3
 };
 
 function formatArea(aland) {
+  if (!aland) return null;
   const sqMiles = aland / 2589988;
   return sqMiles.toFixed(1);
 }
 
-export default function TribalBoundaries({ data, alerts = {} }) {
+// Get a unique ID for the feature (works with both US and Canadian data)
+function getFeatureId(props) {
+  return props.GEOID || props.NAME1 || props.NAME || props.name || 'unknown';
+}
+
+// Get display name for the feature
+function getFeatureName(props) {
+  return props.NAME || props.NAME1 || props.name || 'Unknown';
+}
+
+// Get full name for the feature
+function getFeatureFullName(props) {
+  if (props.NAMELSAD) return props.NAMELSAD;
+  if (props.TYPE) return `${getFeatureName(props)} ${props.TYPE}`;
+  return getFeatureName(props);
+}
+
+export default function TribalBoundaries({ data, alerts = {}, alertsRaw = [] }) {
   const map = useMap();
   const [selectedTribe, setSelectedTribe] = useState(null);
+  const [tribeAlerts, setTribeAlerts] = useState([]);
   const geoJsonRef = useRef(null);
 
   const style = useCallback((feature) => {
-    const geoid = feature.properties.GEOID;
-    const alertLevel = alerts[geoid];
+    const props = feature.properties;
+    const isCanadian = props.isCanadian === true;
+    const baseStyle = isCanadian ? canadianStyle : usStyle;
 
-    if (alertLevel === 'WARNING') {
-      return { ...defaultStyle, fillColor: SEVERITY_COLORS.WARNING, color: SEVERITY_COLORS.WARNING };
+    const featureId = getFeatureId(props);
+    const alertLevel = alerts[featureId];
+
+    if (alertLevel === 'WARNING' || alertLevel === 'EMERGENCY') {
+      return { ...baseStyle, fillColor: SEVERITY_COLORS.WARNING, color: SEVERITY_COLORS.WARNING };
     }
     if (alertLevel === 'WATCH') {
-      return { ...defaultStyle, fillColor: SEVERITY_COLORS.WATCH, color: SEVERITY_COLORS.WATCH };
-    }
-    if (alertLevel === 'EMERGENCY') {
-      return { ...defaultStyle, fillColor: SEVERITY_COLORS.EMERGENCY, color: SEVERITY_COLORS.EMERGENCY };
+      return { ...baseStyle, fillColor: SEVERITY_COLORS.WATCH, color: SEVERITY_COLORS.WATCH };
     }
 
-    return defaultStyle;
+    return baseStyle;
   }, [alerts]);
 
   const onEachFeature = useCallback((feature, layer) => {
     const props = feature.properties;
-    const alertLevel = alerts[props.GEOID];
+    const isCanadian = props.isCanadian === true;
+    const featureId = getFeatureId(props);
+    const alertLevel = alerts[featureId];
+    const displayName = getFeatureName(props);
 
     // Add CSS class for pulsing animation based on alert level
     if (layer.getElement) {
@@ -69,28 +103,40 @@ export default function TribalBoundaries({ data, alerts = {} }) {
         }
       },
       click: (e) => {
+        // Get center from click location or layer bounds
+        const center = e.latlng || layer.getBounds().getCenter();
+
+        // Find alerts affecting this tribe
+        const matchingAlerts = getAlertsForTribe(alertsRaw, feature);
+        setTribeAlerts(matchingAlerts);
+
         setSelectedTribe({
-          name: props.NAME,
-          fullName: props.NAMELSAD,
-          geoid: props.GEOID,
+          name: displayName,
+          fullName: getFeatureFullName(props),
+          id: featureId,
           area: formatArea(props.ALAND),
-          lat: parseFloat(props.INTPTLAT),
-          lng: parseFloat(props.INTPTLON),
-          alertStatus: alerts[props.GEOID] || 'NONE'
+          province: props.PROVINCE || props.STATE || null,
+          isCanadian,
+          lat: center.lat,
+          lng: center.lng,
+          alertStatus: alertLevel || 'NONE'
         });
-        map.flyTo(e.latlng, Math.max(map.getZoom(), 8), { duration: 0.5 });
+        map.flyTo(center, Math.max(map.getZoom(), 8), { duration: 0.5 });
       }
     });
 
-    layer.bindTooltip(props.NAME, {
+    // Tooltip with flag indicator for Canadian vs US
+    const tooltipContent = isCanadian ? `🍁 ${displayName}` : displayName;
+    layer.bindTooltip(tooltipContent, {
       permanent: false,
       direction: 'top',
       className: 'tribal-tooltip'
     });
-  }, [alerts, map]);
+  }, [alerts, alertsRaw, map]);
 
   const handleClosePopup = useCallback(() => {
     setSelectedTribe(null);
+    setTribeAlerts([]);
   }, []);
 
   if (!data) return null;
@@ -102,27 +148,61 @@ export default function TribalBoundaries({ data, alerts = {} }) {
         data={data}
         style={style}
         onEachFeature={onEachFeature}
+        pane="tribalPane"
       />
       {selectedTribe && (
         <Popup
           position={[selectedTribe.lat, selectedTribe.lng]}
           onClose={handleClosePopup}
+          className="tribal-popup"
         >
-          <div className="min-w-[200px]">
-            <h3 className="font-bold text-lg text-gray-900 mb-1">
-              {selectedTribe.name}
-            </h3>
-            <p className="text-sm text-gray-600 mb-2">
-              {selectedTribe.fullName}
-            </p>
-            <div className="border-t pt-2 mt-2 space-y-1">
-              <p className="text-sm">
-                <span className="font-medium">Land Area:</span> {selectedTribe.area} sq mi
-              </p>
-              <p className="text-sm">
-                <span className="font-medium">Status:</span>{' '}
-                <StatusBadge status={selectedTribe.alertStatus} />
-              </p>
+          <div className="tribal-popup-content">
+            <div className="tribal-popup-header">
+              <div className="tribal-popup-flag">
+                {selectedTribe.isCanadian ? '🍁' : '🏛️'}
+              </div>
+              <div>
+                <h3 className="tribal-popup-title">{selectedTribe.name}</h3>
+                <p className="tribal-popup-subtitle">{selectedTribe.fullName}</p>
+              </div>
+            </div>
+
+            <StatusBadge status={selectedTribe.alertStatus} />
+
+            {/* Active Alerts List */}
+            {tribeAlerts.length > 0 && (
+              <div className="tribal-popup-alerts">
+                <h4 className="tribal-popup-alerts-title">Active Hazards</h4>
+                {tribeAlerts.map((alert, idx) => (
+                  <div key={alert.id || idx} className={`tribal-alert-item tribal-alert-item--${alert.severity?.toLowerCase() || 'advisory'}`}>
+                    <div className="tribal-alert-item-header">
+                      {alert.isCanadian && <span className="tribal-alert-flag">🍁</span>}
+                      <span className="tribal-alert-event">{alert.event}</span>
+                    </div>
+                    {alert.headline && (
+                      <p className="tribal-alert-headline">{alert.headline}</p>
+                    )}
+                    <p className="tribal-alert-expires">
+                      Expires: {alert.expires ? new Date(alert.expires).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'N/A'}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="tribal-popup-details">
+              {selectedTribe.province && (
+                <p className="tribal-popup-detail">
+                  <span className="tribal-popup-label">{selectedTribe.isCanadian ? 'Province:' : 'State:'}</span>
+                  <span>{selectedTribe.province}</span>
+                </p>
+              )}
+              {selectedTribe.area && (
+                <p className="tribal-popup-detail">
+                  <span className="tribal-popup-label">Land Area:</span>
+                  <span>{selectedTribe.area} sq mi</span>
+                </p>
+              )}
             </div>
           </div>
         </Popup>
@@ -132,12 +212,30 @@ export default function TribalBoundaries({ data, alerts = {} }) {
 }
 
 function StatusBadge({ status }) {
-  const colors = {
-    WARNING: 'text-red-600',
-    WATCH: 'text-yellow-600',
-    EMERGENCY: 'text-red-800',
-    NONE: 'text-green-600'
+  if (status === 'NONE') {
+    return (
+      <div className="tribal-status tribal-status--clear">
+        <svg className="tribal-status-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <span>No Active Hazards</span>
+      </div>
+    );
+  }
+
+  const configs = {
+    WARNING: { className: 'tribal-status--warning', label: 'Weather Warning' },
+    WATCH: { className: 'tribal-status--watch', label: 'Weather Watch' },
+    EMERGENCY: { className: 'tribal-status--emergency', label: 'Emergency Alert' }
   };
-  const label = status === 'NONE' ? 'No Active Alerts' : status;
-  return <span className={`font-semibold ${colors[status] || colors.NONE}`}>{label}</span>;
+  const config = configs[status] || configs.WARNING;
+
+  return (
+    <div className={`tribal-status ${config.className}`}>
+      <svg className="tribal-status-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+      </svg>
+      <span>{config.label}</span>
+    </div>
+  );
 }

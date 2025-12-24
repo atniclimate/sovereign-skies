@@ -1,9 +1,26 @@
+import { AppShell } from './components/layout';
+import { LoadingOverlay } from './components/ui';
 import Map from './components/Map';
 import SkipLink from './components/common/SkipLink';
+import useAppState from './hooks/useAppState';
+import useAlerts from './hooks/useAlerts';
 
 function App() {
+  const {
+    isLoading,
+    loadingProgress,
+    loadingMessage
+  } = useAppState();
+
+  const {
+    loading: alertsLoading,
+    error: alertsError,
+    lastUpdated,
+    refresh: refreshAlerts
+  } = useAlerts(true);
+
   return (
-    <div className="h-screen w-screen">
+    <>
       {/* Skip link for accessibility */}
       <SkipLink />
 
@@ -16,21 +33,24 @@ function App() {
         aria-atomic="true"
       />
 
-      {/* Full-screen map */}
-      <main
-        id="main-map"
-        className="h-full w-full"
-        role="application"
-        aria-label="Pacific Northwest Tribal Weather Map"
-        aria-describedby="map-instructions"
+      {/* Loading overlay */}
+      <LoadingOverlay
+        isVisible={isLoading}
+        progress={loadingProgress}
+        message={loadingMessage}
+      />
+
+      {/* Main app shell */}
+      <AppShell
+        lastUpdated={lastUpdated}
+        isLoading={alertsLoading}
+        error={alertsError}
+        onRefresh={refreshAlerts}
+        hideStatusRail={true}
       >
-        <span id="map-instructions" className="sr-only">
-          Interactive map showing tribal boundaries and weather alerts.
-          Use zoom controls or pinch to zoom. Click on tribal areas for details.
-        </span>
         <Map />
-      </main>
-    </div>
+      </AppShell>
+    </>
   );
 }
 

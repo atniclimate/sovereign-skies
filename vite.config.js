@@ -3,6 +3,17 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  server: {
+    proxy: {
+      // Proxy for Environment Canada MSC Datamart (CORS not allowed)
+      '/ec-alerts': {
+        target: 'https://dd.weather.gc.ca',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/ec-alerts/, ''),
+        secure: true
+      }
+    }
+  },
   plugins: [
     react(),
     VitePWA({
@@ -34,7 +45,7 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,geojson}'],
         runtimeCaching: [
           {
-            urlPattern: new RegExp('^https://[a-c]\.tile\.openstreetmap\.org/'),
+            urlPattern: new RegExp('^https://[a-c]\\.tile\\.openstreetmap\\.org/'),
             handler: 'CacheFirst',
             options: {
               cacheName: 'osm-tiles',
@@ -46,7 +57,7 @@ export default defineConfig({
             }
           },
           {
-            urlPattern: new RegExp('^https://mesonet\.agron\.iastate\.edu/'),
+            urlPattern: new RegExp('^https://mesonet\\.agron\\.iastate\\.edu/'),
             handler: 'NetworkFirst',
             options: {
               cacheName: 'satellite-tiles',

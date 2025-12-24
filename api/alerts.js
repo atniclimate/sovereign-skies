@@ -1,26 +1,91 @@
 // Vercel Serverless Function: /api/alerts
-// Proxies NWS API and filters for PNW states
+// Proxies NWS API for weather alerts with zone geometries
 
 const NWS_BASE_URL = 'https://api.weather.gov';
 const PNW_STATES = ['WA', 'OR', 'ID'];
 
+// Cache for zone geometries (in-memory, resets on cold start)
+const zoneCache = new Map();
+
 // Map NWS severity to our severity levels
-function mapSeverity(nwsSeverity, urgency, certainty) {
-  if (nwsSeverity === 'Extreme' || urgency === 'Immediate') {
+function mapSeverity(nwsSeverity, urgency, certainty, event) {
+  // High priority events
+  const emergencyEvents = ['Tsunami Warning', 'Earthquake Warning', 'Extreme Wind Warning', 'Tornado Warning'];
+  const warningEvents = ['High Wind Warning', 'Winter Storm Warning', 'Flood Warning', 'Flash Flood Warning', 'Blizzard Warning', 'Ice Storm Warning'];
+
+  if (emergencyEvents.some(e => event?.includes(e)) || nwsSeverity === 'Extreme' || urgency === 'Immediate') {
     return 'EMERGENCY';
   }
-  if (nwsSeverity === 'Severe' || certainty === 'Observed') {
+  if (warningEvents.some(e => event?.includes(e)) || nwsSeverity === 'Severe') {
     return 'WARNING';
   }
-  if (nwsSeverity === 'Moderate') {
+  if (event?.includes('Watch') || nwsSeverity === 'Moderate') {
     return 'WATCH';
   }
-  return 'ADVISORY';
+  if (event?.includes('Advisory')) {
+    return 'ADVISORY';
+  }
+  return 'STATEMENT';
+}
+
+// Fetch zone geometry from NWS API
+async function fetchZoneGeometry(zoneUrl) {
+  if (zoneCache.has(zoneUrl)) {
+    return zoneCache.get(zoneUrl);
+  }
+
+  try {
+    const response = await fetch(zoneUrl, {
+      headers: {
+        'User-Agent': 'TribalWeather/1.0 (tribal-emergency-alerts)',
+        'Accept': 'application/geo+json'
+      }
+    });
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    const geometry = data.geometry || null;
+
+    if (geometry) {
+      zoneCache.set(zoneUrl, geometry);
+    }
+
+    return geometry;
+  } catch (err) {
+    console.error(`Failed to fetch zone ${zoneUrl}:`, err.message);
+    return null;
+  }
 }
 
 // Parse an NWS alert into our format
-function parseAlert(feature) {
+async function parseAlert(feature) {
   const props = feature.properties;
+  const affectedZones = props.affectedZones || [];
+
+  // Fetch geometries for all affected zones (limit concurrency)
+  let geometry = feature.geometry;
+
+  if (!geometry && affectedZones.length > 0) {
+    // Fetch first zone's geometry as representative
+    const zoneGeometries = await Promise.all(
+      affectedZones.slice(0, 3).map(fetchZoneGeometry)
+    );
+
+    // Use first valid geometry or combine into MultiPolygon
+    const validGeoms = zoneGeometries.filter(Boolean);
+    if (validGeoms.length === 1) {
+      geometry = validGeoms[0];
+    } else if (validGeoms.length > 1) {
+      // Combine into MultiPolygon
+      geometry = {
+        type: 'MultiPolygon',
+        coordinates: validGeoms.flatMap(g =>
+          g.type === 'MultiPolygon' ? g.coordinates : [g.coordinates]
+        )
+      };
+    }
+  }
 
   return {
     id: props.id,
@@ -28,19 +93,21 @@ function parseAlert(feature) {
     headline: props.headline,
     description: props.description,
     instruction: props.instruction,
-    severity: mapSeverity(props.severity, props.urgency, props.certainty),
+    severity: mapSeverity(props.severity, props.urgency, props.certainty, props.event),
     nwsSeverity: props.severity,
     urgency: props.urgency,
     certainty: props.certainty,
     effective: props.effective,
+    onset: props.onset,
     expires: props.expires,
+    ends: props.ends,
     areaDesc: props.areaDesc,
-    affectedZones: props.affectedZones || [],
+    affectedZones: affectedZones,
     geocode: props.geocode || {},
     ugcCodes: props.geocode?.UGC || [],
     sameCodes: props.geocode?.SAME || [],
     senderName: props.senderName,
-    geometry: feature.geometry
+    geometry: geometry
   };
 }
 
@@ -49,6 +116,7 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=30');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -59,42 +127,40 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Fetch alerts for each PNW state
-    const stateAlerts = await Promise.all(
-      PNW_STATES.map(async (state) => {
-        const url = `${NWS_BASE_URL}/alerts/active?area=${state}`;
-        const response = await fetch(url, {
-          headers: {
-            'User-Agent': 'TribalWeather/1.0 (contact@tribalweather.app)',
-            'Accept': 'application/geo+json'
-          }
-        });
-
-        if (!response.ok) {
-          console.error(`Failed to fetch alerts for ${state}: ${response.status}`);
-          return [];
-        }
-
-        const data = await response.json();
-        return data.features || [];
-      })
-    );
-
-    // Flatten and dedupe by alert ID
-    const allFeatures = stateAlerts.flat();
-    const uniqueAlerts = new Map();
-
-    for (const feature of allFeatures) {
-      const id = feature.properties?.id;
-      if (id && !uniqueAlerts.has(id)) {
-        uniqueAlerts.set(id, parseAlert(feature));
+    // Fetch alerts for all PNW states in parallel
+    const url = `${NWS_BASE_URL}/alerts/active?area=${PNW_STATES.join(',')}`;
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'TribalWeather/1.0 (tribal-emergency-alerts)',
+        'Accept': 'application/geo+json'
       }
+    });
+
+    if (!response.ok) {
+      throw new Error(`NWS API returned ${response.status}`);
     }
 
-    const alerts = Array.from(uniqueAlerts.values());
+    const data = await response.json();
+    const features = data.features || [];
 
-    // Sort by severity (EMERGENCY > WARNING > WATCH > ADVISORY)
-    const severityOrder = { EMERGENCY: 0, WARNING: 1, WATCH: 2, ADVISORY: 3 };
+    // Dedupe by alert ID and parse with geometries
+    const uniqueIds = new Set();
+    const uniqueFeatures = features.filter(f => {
+      const id = f.properties?.id;
+      if (id && !uniqueIds.has(id)) {
+        uniqueIds.add(id);
+        return true;
+      }
+      return false;
+    });
+
+    // Parse alerts with zone geometries (limit to 20 to avoid timeout)
+    const alerts = await Promise.all(
+      uniqueFeatures.slice(0, 50).map(parseAlert)
+    );
+
+    // Sort by severity
+    const severityOrder = { EMERGENCY: 0, WARNING: 1, WATCH: 2, ADVISORY: 3, STATEMENT: 4 };
     alerts.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
 
     return res.status(200).json({

@@ -1,6 +1,6 @@
 /**
  * Alert Matcher Service
- * Matches NWS alerts to tribal boundaries using geographic overlap
+ * Matches NWS/EC alerts to tribal boundaries using geographic overlap
  */
 
 // Simple point-in-polygon check using ray casting
@@ -51,6 +51,50 @@ function getBoundingBox(coordinates) {
   return { minLng, minLat, maxLng, maxLat };
 }
 
+// Calculate centroid from geometry coordinates
+function getCentroid(geometry) {
+  if (!geometry?.coordinates) return null;
+
+  let sumLng = 0, sumLat = 0, count = 0;
+
+  function processCoord(coord) {
+    if (typeof coord[0] === 'number' && typeof coord[1] === 'number') {
+      sumLng += coord[0];
+      sumLat += coord[1];
+      count++;
+    } else if (Array.isArray(coord)) {
+      coord.forEach(processCoord);
+    }
+  }
+
+  processCoord(geometry.coordinates);
+
+  if (count === 0) return null;
+  return [sumLng / count, sumLat / count];
+}
+
+// Get a unique ID for a tribal feature (works for US and Canadian data)
+function getTribalId(props) {
+  return props.GEOID || props.CLAB_ID || props.NAME || props.name || 'unknown';
+}
+
+// Get the center point for a tribal feature
+function getTribalCenter(feature) {
+  const props = feature.properties;
+
+  // Try US Census centroid first
+  if (props.INTPTLAT && props.INTPTLON) {
+    const lat = parseFloat(props.INTPTLAT);
+    const lng = parseFloat(props.INTPTLON);
+    if (!isNaN(lat) && !isNaN(lng)) {
+      return [lng, lat];
+    }
+  }
+
+  // Calculate centroid from geometry
+  return getCentroid(feature.geometry);
+}
+
 // Check if two bounding boxes overlap
 function bboxOverlap(bbox1, bbox2) {
   return !(
@@ -61,9 +105,22 @@ function bboxOverlap(bbox1, bbox2) {
   );
 }
 
+// Check if a point is inside an alert's geometry
+function isPointInAlert(point, alert) {
+  if (!point || !alert.geometry) return false;
+
+  if (alert.geometry.type === 'Polygon') {
+    return pointInPolygon(point, alert.geometry.coordinates[0]);
+  }
+  if (alert.geometry.type === 'MultiPolygon') {
+    return pointInMultiPolygon(point, alert.geometry.coordinates);
+  }
+  return false;
+}
+
 /**
  * Match alerts to tribal boundaries
- * Returns a map of GEOID -> highest severity alert level
+ * Returns a map of tribal ID -> highest severity alert level
  */
 export function matchAlertsToTribes(alerts, tribalGeoJSON) {
   const tribalAlerts = {};
@@ -72,57 +129,30 @@ export function matchAlertsToTribes(alerts, tribalGeoJSON) {
     return tribalAlerts;
   }
 
+  const severityOrder = { EMERGENCY: 0, WARNING: 1, WATCH: 2, ADVISORY: 3, STATEMENT: 4 };
+
   for (const tribe of tribalGeoJSON.features) {
-    const geoid = tribe.properties.GEOID;
-    const tribeLat = parseFloat(tribe.properties.INTPTLAT);
-    const tribeLng = parseFloat(tribe.properties.INTPTLON);
-    const tribeCenter = [tribeLng, tribeLat];
+    if (!tribe.geometry) continue;
+
+    const tribalId = getTribalId(tribe.properties);
+    const tribeCenter = getTribalCenter(tribe);
+
+    if (!tribeCenter) continue;
 
     // Get tribe's bounding box for quick filtering
     const tribeBbox = getBoundingBox(tribe.geometry.coordinates);
 
     let highestSeverity = null;
-    const severityOrder = { EMERGENCY: 0, WARNING: 1, WATCH: 2, ADVISORY: 3 };
 
     for (const alert of alerts) {
-      let matched = false;
+      if (!alert.geometry) continue;
 
-      // Method 1: Check if alert has geometry and overlaps tribe
-      if (alert.geometry?.type === 'Polygon') {
-        const alertBbox = getBoundingBox(alert.geometry.coordinates);
-        if (bboxOverlap(tribeBbox, alertBbox)) {
-          // Check if tribe center is inside alert polygon
-          if (pointInPolygon(tribeCenter, alert.geometry.coordinates[0])) {
-            matched = true;
-          }
-        }
-      } else if (alert.geometry?.type === 'MultiPolygon') {
-        const alertBbox = getBoundingBox(alert.geometry.coordinates);
-        if (bboxOverlap(tribeBbox, alertBbox)) {
-          if (pointInMultiPolygon(tribeCenter, alert.geometry.coordinates)) {
-            matched = true;
-          }
-        }
-      }
+      // Quick bounding box check first
+      const alertBbox = getBoundingBox(alert.geometry.coordinates);
+      if (!bboxOverlap(tribeBbox, alertBbox)) continue;
 
-      // Method 2: Check if tribe center falls within alert's area description
-      // This is a fallback for alerts without precise geometry
-      if (!matched && alert.areaDesc) {
-        // Simple check: if alert mentions the state the tribe is in
-        const tribeName = tribe.properties.NAME?.toLowerCase() || '';
-        const areaDesc = alert.areaDesc.toLowerCase();
-
-        // Check if any part of the area description might match
-        if (areaDesc.includes(tribeName) ||
-            (tribeLat >= 42 && tribeLat <= 49 && areaDesc.includes('washington')) ||
-            (tribeLat >= 42 && tribeLat <= 46 && areaDesc.includes('oregon')) ||
-            (tribeLng >= -117 && tribeLng <= -111 && areaDesc.includes('idaho'))) {
-          // Still need geometry match for accuracy, so skip this loose match
-          // matched = true;
-        }
-      }
-
-      if (matched) {
+      // Check if tribe center is inside alert polygon
+      if (isPointInAlert(tribeCenter, alert)) {
         const severity = alert.severity;
         if (!highestSeverity || severityOrder[severity] < severityOrder[highestSeverity]) {
           highestSeverity = severity;
@@ -131,7 +161,7 @@ export function matchAlertsToTribes(alerts, tribalGeoJSON) {
     }
 
     if (highestSeverity) {
-      tribalAlerts[geoid] = highestSeverity;
+      tribalAlerts[tribalId] = highestSeverity;
     }
   }
 
@@ -144,17 +174,8 @@ export function matchAlertsToTribes(alerts, tribalGeoJSON) {
 export function getAlertsForTribe(alerts, tribe) {
   if (!alerts?.length || !tribe) return [];
 
-  const tribeLat = parseFloat(tribe.properties.INTPTLAT);
-  const tribeLng = parseFloat(tribe.properties.INTPTLON);
-  const tribeCenter = [tribeLng, tribeLat];
+  const tribeCenter = getTribalCenter(tribe);
+  if (!tribeCenter) return [];
 
-  return alerts.filter(alert => {
-    if (alert.geometry?.type === 'Polygon') {
-      return pointInPolygon(tribeCenter, alert.geometry.coordinates[0]);
-    }
-    if (alert.geometry?.type === 'MultiPolygon') {
-      return pointInMultiPolygon(tribeCenter, alert.geometry.coordinates);
-    }
-    return false;
-  });
+  return alerts.filter(alert => isPointInAlert(tribeCenter, alert));
 }

@@ -104,6 +104,7 @@ export function clearAllCache() {
 // Cache keys
 export const CACHE_KEYS = {
   ALERTS: 'alerts',
+  RIVERS: 'rivers',
   TRIBAL_DATA: 'tribal_data',
   LAST_POSITION: 'last_position'
 };
@@ -111,6 +112,7 @@ export const CACHE_KEYS = {
 // Default TTLs
 export const CACHE_TTL = {
   ALERTS: 5 * 60 * 1000,      // 5 minutes
+  RIVERS: 5 * 60 * 1000,      // 5 minutes
   TRIBAL_DATA: 24 * 60 * 60 * 1000, // 24 hours
   LAST_POSITION: 7 * 24 * 60 * 60 * 1000 // 7 days
 };
