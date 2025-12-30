@@ -4,6 +4,24 @@ All notable changes to IndigenousACCESS / TribalWeather will be documented in th
 
 ## [Unreleased] - 2025-12-29
 
+### Fixed
+
+#### CORS Issues on Netlify Deployment
+- **Added Netlify serverless functions** to proxy external APIs
+  - `netlify/functions/alerts.js` - Proxies NWS Weather API
+  - `netlify/functions/rivers.js` - Proxies NOAA NWPS river gauges
+  - `netlify/functions/ec-alerts.js` - Proxies Environment Canada MSC Datamart
+- **Added `netlify.toml`** configuration with:
+  - Redirect rules mapping `/api/*` to `/.netlify/functions/*`
+  - Security headers (X-Frame-Options, CSP, etc.)
+  - Caching headers for static assets
+  - SPA fallback routing
+
+**Issue**: The deployed Netlify app was making direct API calls to external services
+(dd.weather.gc.ca, api.water.noaa.gov) which were blocked by CORS policies. The
+serverless functions now act as proxies, making server-to-server requests that
+bypass browser CORS restrictions.
+
 ### Added
 
 #### Navigation & Pages
