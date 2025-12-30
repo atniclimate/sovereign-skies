@@ -36,15 +36,12 @@ const NAV_ITEMS = [
     )
   },
   {
-    id: 'news',
-    label: 'News',
+    id: 'forecast',
+    label: 'Forecast',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M19 20H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v1" />
-        <path d="M21 12a2 2 0 0 0-2-2h-2v8a2 2 0 0 0 2 2h2" />
-        <rect x="5" y="8" width="6" height="4" />
-        <line x1="5" y1="14" x2="11" y2="14" />
-        <line x1="5" y1="17" x2="11" y2="17" />
+        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+        <circle cx="12" cy="12" r="4" />
       </svg>
     )
   },

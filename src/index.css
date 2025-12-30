@@ -2655,3 +2655,464 @@ button.metric-tile {
 .-rotate-90 {
   transform: rotate(-90deg);
 }
+
+/* ==========================================================================
+   EMBEDDED MODE ADJUSTMENTS
+   For when the app is embedded in an iframe on external sites
+   ========================================================================== */
+
+/* Compact sidebar for shorter viewports (embedded iframes) */
+@media (max-height: 700px) {
+  .map-sidebar {
+    width: 220px;
+    gap: var(--space-2);
+    max-height: calc(100% - var(--space-4));
+  }
+
+  .module-panel-header,
+  .module-panel__header {
+    padding: var(--space-2) var(--space-3);
+    min-height: 36px;
+  }
+
+  .module-panel-content,
+  .module-panel__content {
+    padding: var(--space-3);
+  }
+
+  .sidebar-button {
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .sidebar-list {
+    padding: 0 var(--space-3) var(--space-2);
+    gap: 2px;
+  }
+
+  .layer-toggle {
+    padding: var(--space-1) var(--space-2);
+    gap: var(--space-2);
+  }
+
+  .layer-toggle-label {
+    font-size: 0.6875rem;
+  }
+
+  .text-label {
+    font-size: 0.6875rem;
+  }
+
+  .text-label-sm {
+    font-size: 0.5625rem;
+  }
+
+  /* Compact region selector */
+  .region-chip {
+    padding: var(--space-1) var(--space-2);
+    font-size: 0.625rem;
+    min-height: 28px;
+  }
+}
+
+/* Even more compact for very short viewports */
+@media (max-height: 550px) {
+  .map-sidebar {
+    width: 200px;
+    gap: var(--space-1);
+    top: var(--space-2);
+    left: var(--space-2);
+  }
+
+  .module-panel {
+    border-radius: var(--radius-md);
+  }
+
+  .module-panel-header,
+  .module-panel__header {
+    padding: var(--space-1) var(--space-2);
+    min-height: 32px;
+  }
+
+  .module-panel-content,
+  .module-panel__content {
+    padding: var(--space-2);
+  }
+
+  .sidebar-button {
+    padding: var(--space-1) var(--space-2);
+  }
+
+  .sidebar-list {
+    padding: 0 var(--space-2) var(--space-1);
+  }
+
+  .layer-toggle {
+    padding: 2px var(--space-1);
+  }
+
+  /* Hide less important elements */
+  .sidebar-list-item {
+    font-size: 0.625rem;
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+  }
+}
+
+/* Mobile landscape / very short heights - collapse sidebar further */
+@media (max-height: 450px) {
+  .map-sidebar {
+    width: 180px;
+  }
+
+  /* Make layer toggles horizontal and more compact */
+  .module-panel-content .layer-toggle + .layer-toggle {
+    margin-top: 0;
+  }
+}
+
+/* =============================================================================
+   DATA PROVENANCE COMPONENT
+   Shows data freshness, sources, and staleness warnings
+   ============================================================================= */
+
+.data-provenance {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--surface-2);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+}
+
+.data-provenance--compact {
+  padding: var(--space-2);
+  background: transparent;
+  border: none;
+}
+
+.data-provenance-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.data-provenance-error,
+.data-provenance-warning {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+}
+
+.data-provenance-error {
+  background: color-mix(in oklch, var(--color-danger), transparent 90%);
+}
+
+.data-provenance-warning {
+  background: color-mix(in oklch, var(--color-warning), transparent 90%);
+}
+
+.data-provenance-sources {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+}
+
+.data-provenance-disclaimer {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  line-height: 1.4;
+  margin: 0;
+  padding-top: var(--space-1);
+  border-top: 1px solid var(--border);
+}
+
+/* Staleness status dots */
+.status-dot--fresh,
+.status-dot--success {
+  background: var(--color-success);
+}
+
+.status-dot--stale {
+  background: var(--color-warning);
+}
+
+.status-dot--very-stale,
+.status-dot--danger {
+  background: var(--color-danger);
+}
+
+.status-dot--unknown {
+  background: var(--muted);
+}
+
+/* =============================================================================
+   FORECAST PAGE STYLES
+   ============================================================================= */
+
+.forecast-page {
+  min-height: 100%;
+  padding-bottom: calc(56px + var(--safe-bottom) + var(--space-4));
+}
+
+.forecast-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: 0 var(--space-4) var(--space-4);
+}
+
+.forecast-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--surface-2);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  text-align: left;
+  width: 100%;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.forecast-card:hover,
+.forecast-card:focus-visible {
+  background: var(--surface-3);
+  border-color: var(--border-hover);
+}
+
+.forecast-card:focus-visible {
+  outline: 2px solid var(--color-action);
+  outline-offset: 2px;
+}
+
+.forecast-card--error {
+  opacity: 0.6;
+}
+
+.forecast-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.forecast-card-temp {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+}
+
+.forecast-card-current {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.forecast-card-icon {
+  flex-shrink: 0;
+}
+
+.forecast-card-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.forecast-card-upcoming {
+  display: flex;
+  gap: var(--space-2);
+  overflow-x: auto;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+  -webkit-overflow-scrolling: touch;
+}
+
+.forecast-mini {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  min-width: 60px;
+  flex-shrink: 0;
+}
+
+.forecast-mini-icon {
+  width: 24px;
+  height: 24px;
+}
+
+.forecast-mini-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* Forecast Detail View */
+.forecast-detail {
+  padding: var(--space-4);
+}
+
+.forecast-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.forecast-detail-periods {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.forecast-period {
+  padding: var(--space-3);
+  background: var(--surface-2);
+  border-radius: var(--radius-md);
+  border-left: 3px solid transparent;
+}
+
+.forecast-period--day {
+  border-left-color: var(--color-warning);
+}
+
+.forecast-period--night {
+  border-left-color: var(--color-action);
+  background: var(--surface-1);
+}
+
+.forecast-period-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-2);
+}
+
+.forecast-detail-attribution {
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+  text-align: center;
+}
+
+/* Responsive forecast grid */
+@media (min-width: 640px) {
+  .forecast-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .forecast-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* Text display size for temperatures */
+.text-display {
+  font-size: var(--text-3xl);
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* =============================================================================
+   MOBILE SIDEBAR CONTROLS
+   Collapsible sidebar with toggle button for mobile devices
+   ============================================================================= */
+
+/* Mobile sidebar toggle button - always visible on mobile */
+.mobile-sidebar-toggle {
+  display: none; /* Hidden on desktop */
+  position: absolute;
+  top: var(--space-3);
+  left: var(--space-3);
+  z-index: 1100;
+  width: 48px;
+  height: 48px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--primary);
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.mobile-sidebar-toggle:hover,
+.mobile-sidebar-toggle:focus-visible {
+  background: var(--surface-3);
+  border-color: var(--border-hover);
+}
+
+.mobile-sidebar-toggle:focus-visible {
+  outline: 2px solid var(--color-action);
+  outline-offset: 2px;
+}
+
+/* Badge showing alert count when sidebar is collapsed */
+.mobile-sidebar-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  background: var(--color-danger);
+  color: white;
+  font-size: 0.625rem;
+  font-weight: 700;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+/* Mobile: Show toggle button, make sidebar collapsible */
+@media (max-width: 768px) {
+  .mobile-sidebar-toggle {
+    display: flex;
+  }
+
+  .map-sidebar {
+    transition: transform 0.3s ease, opacity 0.3s ease;
+  }
+
+  .map-sidebar--collapsed {
+    transform: translateX(-120%);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* Push sidebar down when toggle is visible */
+  .map-sidebar:not(.map-sidebar--collapsed) {
+    top: calc(var(--space-3) + 48px + var(--space-2));
+  }
+}
+
+/* Very small screens - sidebar takes full width when open */
+@media (max-width: 480px) {
+  .map-sidebar:not(.map-sidebar--collapsed) {
+    width: calc(100% - var(--space-6));
+    max-height: calc(100dvh - 200px);
+    overflow-y: auto;
+  }
+
+  /* Larger toggle button for better touch targets */
+  .mobile-sidebar-toggle {
+    width: 52px;
+    height: 52px;
+  }
+}

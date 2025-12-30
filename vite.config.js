@@ -20,8 +20,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'data/*.geojson'],
       manifest: {
-        name: 'TribalWeather',
-        short_name: 'TribalWeather',
+        name: 'PNW Weather Alerts',
+        short_name: 'PNW Alerts',
         description: 'Real-time weather alerts for Pacific Northwest Tribal communities',
         theme_color: '#4A90D9',
         background_color: '#ffffff',

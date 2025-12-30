@@ -1,5 +1,11 @@
 import { memo, useState, useMemo } from 'react';
-import { ModulePanel, AlertCard, FilterRow, SearchInput } from '../ui';
+import { ModulePanel, AlertCard, FilterRow, SearchInput, DataProvenance } from '../ui';
+
+// Data sources for alerts
+const ALERT_SOURCES = [
+  'NWS (weather.gov)',
+  'Environment Canada'
+];
 
 const SEVERITY_FILTERS = [
   { id: 'EMERGENCY', label: 'Emergency', variant: 'danger' },
@@ -19,6 +25,8 @@ const REGION_FILTERS = [
 function AlertsPage({
   alerts = [],
   loading = false,
+  lastUpdated = null,
+  onRefresh,
   onAlertClick
 }) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -116,6 +124,16 @@ function AlertsPage({
           filters={REGION_FILTERS}
           activeFilters={regionFilters}
           onFilterChange={setRegionFilters}
+        />
+      </div>
+
+      {/* Data Provenance */}
+      <div className="px-4 pb-3">
+        <DataProvenance
+          lastUpdated={lastUpdated}
+          sources={ALERT_SOURCES}
+          isLoading={loading}
+          onRefresh={onRefresh}
         />
       </div>
 
