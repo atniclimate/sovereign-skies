@@ -13,7 +13,7 @@ const NWS_DIRECT_URL = 'https://api.weather.gov/alerts/active?area=WA,OR,ID,PZ';
 // Use proxy in development to avoid CORS issues
 const EC_DATAMART_BASE = import.meta.env.DEV
   ? '/ec-alerts/today/alerts/cap'
-  : 'https://dd.weather.gc.ca/today/alerts/cap';
+  : '/api/ec-alerts';
 
 // Station codes for Pacific Northwest region
 const EC_STATIONS = {
@@ -575,24 +575,41 @@ export default function useAlerts(includeCanada = true) {
     }
   }, [includeCanada]);
 
+
   useEffect(() => {
-    const cached = getCache(CACHE_KEYS.ALERTS);
-    if (cached) {
-      setAlerts(cached.alerts || []);
-      setLastUpdated(new Date(cached.timestamp));
-      setLoading(false);
-    } else {
-      fetchAlerts(true);
-    }
+    // Track mounted state to prevent state updates after unmount
+    let isMounted = true;
 
-    intervalRef.current = setInterval(() => fetchAlerts(true), POLL_INTERVAL_MS);
+    const initFetch = async () => {
+      const cached = getCache(CACHE_KEYS.ALERTS);
+      if (cached && isMounted) {
+        setAlerts(cached.alerts || []);
+        setLastUpdated(new Date(cached.timestamp));
+        setLoading(false);
+      } else if (isMounted) {
+        await fetchAlerts(true);
+      }
+    };
 
+    initFetch();
+
+    // Set up polling interval
+    intervalRef.current = setInterval(() => {
+      if (isMounted) {
+        fetchAlerts(true);
+      }
+    }, POLL_INTERVAL_MS);
+
+    // Cleanup function
     return () => {
+      isMounted = false;
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
+        intervalRef.current = null;
       }
     };
   }, [fetchAlerts]);
+
 
   const refresh = useCallback(() => {
     setLoading(true);

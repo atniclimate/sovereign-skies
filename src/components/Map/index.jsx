@@ -18,14 +18,23 @@ import AlertZones from './AlertZones';
 import RiverGauges from './RiverGauges';
 import RadarLayer from './RadarLayer';
 import AlertList from '../UI/AlertList';
+import { DataProvenance } from '../ui';
 import useTribalData from '../../hooks/useTribalData';
 import useAlerts from '../../hooks/useAlerts';
 import useRivers from '../../hooks/useRivers';
 import { matchAlertsToTribes } from '../../services/alertMatcher';
 
+// Data sources for provenance display
+const DATA_SOURCES = [
+  'NWS (weather.gov)',
+  'Environment Canada',
+  'NOAA River Gauges'
+];
+
 export default function Map() {
   const [currentRegion, setCurrentRegion] = useState(DEFAULT_REGION);
   const [alertPanelOpen, setAlertPanelOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showActiveWarnings, setShowActiveWarnings] = useState(true);
   const [showRivers, setShowRivers] = useState(true);
   const [showTribal, setShowTribal] = useState(true);
@@ -49,6 +58,10 @@ export default function Map() {
 
   const handleCloseAlertPanel = useCallback(() => {
     setAlertPanelOpen(false);
+  }, []);
+
+  const handleToggleSidebar = useCallback(() => {
+    setSidebarCollapsed(prev => !prev);
   }, []);
 
   const tribalAlerts = useMemo(() => {
@@ -144,6 +157,9 @@ export default function Map() {
   return (
     <div className="map-viewport">
       <MapContainer
+        id="main-map"
+        tabIndex={-1}
+        aria-label="Sovereign Skies weather alert map"
         bounds={REGIONS[DEFAULT_REGION].bounds}
         boundsOptions={{ padding: [10, 10] }}
         minZoom={3}
@@ -180,8 +196,27 @@ export default function Map() {
         <Controls currentRegion={currentRegion} />
       </MapContainer>
 
+      {/* Mobile Sidebar Toggle Button */}
+      <button
+        className="mobile-sidebar-toggle"
+        onClick={handleToggleSidebar}
+        aria-label={sidebarCollapsed ? 'Show controls' : 'Hide controls'}
+        aria-expanded={!sidebarCollapsed}
+      >
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          {sidebarCollapsed ? (
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          ) : (
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          )}
+        </svg>
+        {sidebarCollapsed && alertCount > 0 && (
+          <span className="mobile-sidebar-badge">{alertCount > 99 ? '99+' : alertCount}</span>
+        )}
+      </button>
+
       {/* Sidebar - top left */}
-      <div className="map-sidebar">
+      <div className={`map-sidebar ${sidebarCollapsed ? 'map-sidebar--collapsed' : ''}`}>
         {/* Region Selector */}
         <RegionSelector
           currentRegion={currentRegion}
@@ -413,18 +448,15 @@ export default function Map() {
           </div>
         </div>
 
-        {/* Refresh Button */}
-        {lastUpdated && !loading && (
-          <button
-            onClick={refreshAlerts}
-            className="refresh-button"
-          >
-            <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            <span className="text-label-sm">{lastUpdated.toLocaleTimeString()}</span>
-          </button>
-        )}
+        {/* Data Provenance */}
+        <DataProvenance
+          lastUpdated={lastUpdated}
+          sources={DATA_SOURCES}
+          isLoading={loading}
+          error={error}
+          onRefresh={refreshAlerts}
+          compact={true}
+        />
       </div>
 
       {/* Alert List Sidebar */}

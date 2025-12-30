@@ -120,21 +120,37 @@ export default function useRivers() {
     }
   }, []);
 
+
   useEffect(() => {
-    const cached = getCache(CACHE_KEYS.RIVERS);
-    if (cached) {
-      setGauges(cached.gauges || []);
-      setSummary(cached.summary || {});
-      setLoading(false);
-    } else {
-      fetchRivers(true);
-    }
+    // Track mounted state to prevent state updates after unmount
+    let isMounted = true;
 
-    intervalRef.current = setInterval(() => fetchRivers(true), POLL_INTERVAL_MS);
+    const initFetch = async () => {
+      const cached = getCache(CACHE_KEYS.RIVERS);
+      if (cached && isMounted) {
+        setGauges(cached.gauges || []);
+        setSummary(cached.summary || {});
+        setLoading(false);
+      } else if (isMounted) {
+        await fetchRivers(true);
+      }
+    };
 
+    initFetch();
+
+    // Set up polling interval
+    intervalRef.current = setInterval(() => {
+      if (isMounted) {
+        fetchRivers(true);
+      }
+    }, POLL_INTERVAL_MS);
+
+    // Cleanup function
     return () => {
+      isMounted = false;
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
+        intervalRef.current = null;
       }
     };
   }, [fetchRivers]);
