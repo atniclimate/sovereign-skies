@@ -65,23 +65,61 @@ exports.handler = async function(event, context) {
       return true;
     });
 
-    // Sort by severity and effective time
-    const severityOrder = { Extreme: 0, Severe: 1, Moderate: 2, Minor: 3, Unknown: 4 };
-    uniqueFeatures.sort((a, b) => {
-      const aSev = severityOrder[a.properties?.severity] ?? 5;
-      const bSev = severityOrder[b.properties?.severity] ?? 5;
-      if (aSev !== bSev) return aSev - bSev;
-      return new Date(b.properties?.effective) - new Date(a.properties?.effective);
+    // Map severity to app format
+    function mapSeverity(severity, urgency, event) {
+      const emergencyEvents = ['Tsunami Warning', 'Earthquake Warning', 'Extreme Wind Warning', 'Tornado Warning'];
+      const warningEvents = ['High Wind Warning', 'Winter Storm Warning', 'Flood Warning', 'Flash Flood Warning', 'Blizzard Warning', 'Ice Storm Warning'];
+
+      if (emergencyEvents.some(e => event?.includes(e)) || severity === 'Extreme' || urgency === 'Immediate') {
+        return 'EMERGENCY';
+      }
+      if (warningEvents.some(e => event?.includes(e)) || severity === 'Severe') {
+        return 'WARNING';
+      }
+      if (event?.includes('Watch') || severity === 'Moderate') {
+        return 'WATCH';
+      }
+      if (event?.includes('Advisory')) {
+        return 'ADVISORY';
+      }
+      return 'STATEMENT';
+    }
+
+    // Transform to app format
+    const alerts = uniqueFeatures.map(feature => {
+      const props = feature.properties;
+      return {
+        id: props.id,
+        event: props.event,
+        headline: props.headline,
+        description: props.description,
+        instruction: props.instruction,
+        severity: mapSeverity(props.severity, props.urgency, props.event),
+        nwsSeverity: props.severity,
+        urgency: props.urgency,
+        certainty: props.certainty,
+        areaDesc: props.areaDesc,
+        affectedZones: props.affectedZones || [],
+        effective: props.effective,
+        onset: props.onset,
+        expires: props.expires,
+        ends: props.ends,
+        senderName: props.senderName,
+        geocode: props.geocode,
+        geometry: feature.geometry
+      };
     });
+
+    // Sort by severity
+    const severityOrder = { EMERGENCY: 0, WARNING: 1, WATCH: 2, ADVISORY: 3, STATEMENT: 4 };
+    alerts.sort((a, b) => (severityOrder[a.severity] ?? 5) - (severityOrder[b.severity] ?? 5));
 
     return {
       statusCode: 200,
       headers,
       body: JSON.stringify({
-        type: 'FeatureCollection',
-        features: uniqueFeatures,
-        title: 'PNW Weather Alerts',
-        updated: new Date().toISOString(),
+        alerts,
+        timestamp: new Date().toISOString(),
         areas: PNW_AREAS
       })
     };
