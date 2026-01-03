@@ -3,6 +3,12 @@ import { POLL_INTERVAL_MS } from '../utils/constants';
 import { getCache, setCache, CACHE_KEYS, CACHE_TTL } from '../services/cache';
 import { alertsLogger as logger } from '../utils/logger';
 
+// Cross-border harmonization utilities
+import { detectMeasurementSystem, extractTemperatures } from '../utils/units';
+import { applyUnifiedSeverity, compareSeverity, parseSeverityString } from '../utils/severityMapper';
+import { parseAlertTime, isAlertActive, formatForDisplay } from '../utils/datetime';
+import { resolveAlertGeometry } from '../utils/geometry';
+
 const ALERTS_API_URL = '/api/alerts';
 // Include WA, OR, ID plus Pacific marine zones (PZ) for coastal coverage
 const NWS_DIRECT_URL = 'https://api.weather.gov/alerts/active?area=WA,OR,ID,PZ';
@@ -50,50 +56,44 @@ const REGION_BOUNDS = {
   'default_ab': { minLon: -120.0, maxLon: -110.0, minLat: 49.0, maxLat: 60.0 }
 };
 
-// Map NWS severity to our severity levels based on event type
-function mapSeverity(severity, urgency, event) {
-  const emergencyEvents = ['Tsunami Warning', 'Earthquake Warning', 'Extreme Wind Warning', 'Tornado Warning'];
-  const warningEvents = [
-    'High Wind Warning', 'Winter Storm Warning', 'Flood Warning', 'Flash Flood Warning',
-    'Blizzard Warning', 'Ice Storm Warning', 'Coastal Flood Warning', 'High Surf Warning',
-    'Gale Warning', 'Storm Warning', 'Hurricane Warning'
-  ];
-  const advisoryEvents = [
-    'Coastal Flood Advisory', 'High Surf Advisory', 'Beach Hazards Statement',
-    'Rip Current Statement', 'Small Craft Advisory', 'Dense Fog Advisory'
-  ];
+// Legacy severity label mapping (for backward compatibility with UI)
+// The new severityMapper provides unified levels; this maps to string labels
+const SEVERITY_LEVEL_TO_LABEL = {
+  4: 'EMERGENCY',
+  3: 'WARNING',
+  2: 'WATCH',
+  1: 'ADVISORY',
+  0: 'STATEMENT'
+};
 
-  if (emergencyEvents.some(e => event?.includes(e)) || severity === 'Extreme' || urgency === 'Immediate') {
-    return 'EMERGENCY';
-  }
-  if (warningEvents.some(e => event?.includes(e)) || severity === 'Severe') {
-    return 'WARNING';
-  }
-  if (event?.includes('Watch') || severity === 'Moderate') {
-    return 'WATCH';
-  }
-  if (advisoryEvents.some(e => event?.includes(e)) || event?.includes('Advisory')) {
-    return 'ADVISORY';
-  }
-  return 'STATEMENT';
+// Map NWS severity to our severity levels using unified mapper
+function mapSeverityUnified(severity, urgency, certainty, event) {
+  // Get unified severity from mapper
+  const unified = applyUnifiedSeverity({
+    source: 'NWS',
+    severity,
+    urgency,
+    certainty,
+    event
+  });
+
+  // Map to legacy label for backward compatibility
+  const level = unified?.unifiedSeverity?.level ?? 0;
+  return SEVERITY_LEVEL_TO_LABEL[level] || 'STATEMENT';
 }
 
-// Map EC alert type to our severity levels
-function mapECSeverity(alertType, headline) {
-  const lower = (alertType || '').toLowerCase() + ' ' + (headline || '').toLowerCase();
-  if (lower.includes('warning') || lower.includes('red')) {
-    return 'WARNING';
-  }
-  if (lower.includes('watch') || lower.includes('orange')) {
-    return 'WATCH';
-  }
-  if (lower.includes('advisory') || lower.includes('yellow')) {
-    return 'ADVISORY';
-  }
-  if (lower.includes('statement') || lower.includes('special')) {
-    return 'STATEMENT';
-  }
-  return 'ADVISORY';
+// Map EC alert type to our severity levels using unified mapper
+function mapECSeverityUnified(alertType, headline, event) {
+  // Get unified severity from mapper
+  const unified = applyUnifiedSeverity({
+    source: 'EC',
+    type: alertType,
+    event: event || headline
+  });
+
+  // Map to legacy label for backward compatibility
+  const level = unified?.unifiedSeverity?.level ?? 0;
+  return SEVERITY_LEVEL_TO_LABEL[level] || 'ADVISORY';
 }
 
 // Create a polygon geometry from bounding box
@@ -264,13 +264,21 @@ function parseECCAPFile(xmlText, province) {
           geometry = createBboxPolygon(bounds);
         }
 
-        const mappedSeverity = mapECSeverity(eventName, headline);
+        const mappedSeverity = mapECSeverityUnified(eventName, headline, eventName);
+
+        // Extract temperature values from description for cross-border display
+        const descriptionText = description.replace(/###/g, '').trim();
+        const extractedTemps = extractTemperatures(descriptionText, 'metric');
+
+        // Parse timestamps using centralized datetime utility
+        const parsedEffective = parseAlertTime(effective, 'EC');
+        const parsedExpires = parseAlertTime(expires, 'EC');
 
         alerts.push({
           id: `${alertId}-${areaIdx}`,
           event: eventName || 'Weather Alert',
           headline,
-          description: description.replace(/###/g, '').trim(),
+          description: descriptionText,
           instruction: instruction || '',
           severity: mappedSeverity,
           nwsSeverity: mappedSeverity,
@@ -278,15 +286,18 @@ function parseECCAPFile(xmlText, province) {
           certainty: 'Likely',
           areaDesc: `${areaDesc}, ${province}`,
           affectedZones: [],
-          effective,
-          onset: effective,
-          expires,
-          ends: expires,
+          effective: parsedEffective || effective,
+          onset: parsedEffective || effective,
+          expires: parsedExpires || expires,
+          ends: parsedExpires || expires,
           senderName: 'Environment Canada',
           geocode: {},
           geometry,
           isCanadian: true,
-          province
+          province,
+          // Cross-border harmonization fields
+          measurementSystem: 'metric',
+          extractedTemperatures: extractedTemps
         });
       });
     } catch (err) {
@@ -497,32 +508,54 @@ async function transformNWSResponse(data) {
         }
       }
 
+      // Parse timestamps using centralized datetime utility
+      const parsedEffective = parseAlertTime(props.effective, 'NWS');
+      const parsedExpires = parseAlertTime(props.expires, 'NWS');
+
+      // Extract temperatures from description (imperial units from NWS)
+      const extractedTemps = extractTemperatures(props.description || '', 'imperial');
+
       return {
         id: props.id,
         event: props.event,
         headline: props.headline,
         description: props.description,
         instruction: props.instruction,
-        severity: mapSeverity(props.severity, props.urgency, props.event),
+        severity: mapSeverityUnified(props.severity, props.urgency, props.certainty, props.event),
         nwsSeverity: props.severity,
         urgency: props.urgency,
         certainty: props.certainty,
         areaDesc: props.areaDesc,
         affectedZones: props.affectedZones || [],
-        effective: props.effective,
-        onset: props.onset,
-        expires: props.expires,
-        ends: props.ends,
+        effective: parsedEffective || props.effective,
+        onset: parseAlertTime(props.onset, 'NWS') || props.onset,
+        expires: parsedExpires || props.expires,
+        ends: parseAlertTime(props.ends, 'NWS') || props.ends,
         senderName: props.senderName,
         geocode: props.geocode,
-        geometry
+        geometry,
+        // Cross-border harmonization fields
+        measurementSystem: 'imperial',
+        extractedTemperatures: extractedTemps
       };
     })
   );
 
-  // Sort by severity
-  const severityOrder = { EMERGENCY: 0, WARNING: 1, WATCH: 2, ADVISORY: 3, STATEMENT: 4 };
-  alerts.sort((a, b) => (severityOrder[a.severity] ?? 5) - (severityOrder[b.severity] ?? 5));
+  // Sort by severity using unified comparator
+  // First apply unified severity to each alert, then sort
+  alerts.forEach(alert => {
+    const unified = applyUnifiedSeverity({
+      source: 'NWS',
+      severity: alert.nwsSeverity,
+      urgency: alert.urgency,
+      certainty: alert.certainty,
+      event: alert.event
+    });
+    alert.unifiedSeverity = unified?.unifiedSeverity;
+  });
+
+  // Sort using unified comparator (highest severity first)
+  alerts.sort(compareSeverity);
 
   return { alerts, timestamp: new Date().toISOString() };
 }
@@ -582,10 +615,26 @@ export default function useAlerts(includeCanada = true) {
         canadianAlerts = await fetchCanadianAlerts();
       }
 
-      // Merge and sort all alerts
+      // Merge and sort all alerts using unified severity
       const allAlerts = [...usAlerts, ...canadianAlerts];
-      const severityOrder = { EMERGENCY: 0, WARNING: 1, WATCH: 2, ADVISORY: 3, STATEMENT: 4 };
-      allAlerts.sort((a, b) => (severityOrder[a.severity] ?? 5) - (severityOrder[b.severity] ?? 5));
+
+      // Apply unified severity to Canadian alerts (US alerts already have it from transformNWSResponse)
+      allAlerts.forEach(alert => {
+        if (!alert.unifiedSeverity) {
+          const unified = applyUnifiedSeverity({
+            source: alert.isCanadian ? 'EC' : 'NWS',
+            severity: alert.nwsSeverity,
+            urgency: alert.urgency,
+            certainty: alert.certainty,
+            event: alert.event,
+            type: alert.severity?.toLowerCase() // EC type (warning/watch/advisory)
+          });
+          alert.unifiedSeverity = unified?.unifiedSeverity;
+        }
+      });
+
+      // Sort using unified comparator (highest severity first)
+      allAlerts.sort(compareSeverity);
 
       const timestamp = new Date().toISOString();
 
@@ -639,20 +688,35 @@ export default function useAlerts(includeCanada = true) {
   // Compute alerts with geometry for map display
   const alertsWithGeometry = alerts.filter(a => a.geometry);
 
+  // Filter to only active alerts using centralized datetime utility
+  const activeAlerts = alerts.filter(alert =>
+    isAlertActive(alert.effective, alert.expires)
+  );
+
   // Group alerts by severity for summary
   const alertsByType = alerts.reduce((acc, alert) => {
     acc[alert.severity] = (acc[alert.severity] || 0) + 1;
     return acc;
   }, {});
 
+  // Group by unified severity level for cross-border consistency
+  const alertsByLevel = alerts.reduce((acc, alert) => {
+    const level = alert.unifiedSeverity?.level ?? 0;
+    acc[level] = (acc[level] || 0) + 1;
+    return acc;
+  }, {});
+
   return {
     alerts,
+    activeAlerts,
     alertsWithGeometry,
     alertsByType,
+    alertsByLevel,
     loading,
     error,
     lastUpdated,
     refresh,
-    alertCount: alerts.length
+    alertCount: alerts.length,
+    activeCount: activeAlerts.length
   };
 }
