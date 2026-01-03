@@ -4,6 +4,8 @@ import Map from './components/Map';
 import SkipLink from './components/common/SkipLink';
 import useAppState from './hooks/useAppState';
 import useAlerts from './hooks/useAlerts';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { MapErrorFallback, AppErrorFallback } from './components/ErrorBoundary/fallbacks';
 
 function App() {
   const {
@@ -20,7 +22,10 @@ function App() {
   } = useAlerts(true);
 
   return (
-    <>
+    <ErrorBoundary
+      fallback={AppErrorFallback}
+      context="Application"
+    >
       {/* Skip link for accessibility */}
       <SkipLink />
 
@@ -48,9 +53,15 @@ function App() {
         onRefresh={refreshAlerts}
         hideStatusRail={true}
       >
-        <Map />
+        {/* Map with isolated error boundary - failure doesn't affect alerts */}
+        <ErrorBoundary
+          fallback={MapErrorFallback}
+          context="Map"
+        >
+          <Map />
+        </ErrorBoundary>
       </AppShell>
-    </>
+    </ErrorBoundary>
   );
 }
 
