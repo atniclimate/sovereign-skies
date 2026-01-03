@@ -119,6 +119,29 @@ REGIONS = { PNW, BC, SALISH_SEA, COLUMBIA, ROCKIES }
 SEVERITY_COLORS = { WATCH, WARNING, EMERGENCY }
 ```
 
+## Testing
+
+```bash
+# Run all tests
+npm test
+
+# Run with coverage
+npm run test:coverage
+
+# Run in watch mode
+npm run test:watch
+```
+
+**Test Coverage:**
+- 549+ tests across unit and integration suites
+- 80%+ statement coverage target
+- Integration tests for alert pipeline and hook interactions
+
+## Documentation
+
+- [Architecture](./docs/architecture.md) - System design and data flow
+- [API Reference](./docs/api/README.md) - Hooks and utilities documentation
+
 ## Contributing
 
 This project is maintained by a 1-person team. Priorities are:
