@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { tribalLogger as logger } from '../utils/logger';
 
 const TRIBAL_DATA_URL = '/data/tribes-pnw.min.geojson';
 
@@ -99,7 +100,7 @@ export default function useTribalData(includeCanada = true) {
               const fnGeojson = transformBCFirstNations(fnData);
 
               if (fnGeojson && fnGeojson.features.length > 0) {
-                console.log(`Loaded ${fnGeojson.features.length} BC First Nations reserves`);
+                logger.info(`Loaded BC First Nations reserves`, { count: fnGeojson.features.length });
                 // Merge US and Canadian data
                 usGeojson.features = [
                   ...usGeojson.features,
@@ -108,7 +109,7 @@ export default function useTribalData(includeCanada = true) {
               }
             }
           } catch (fnErr) {
-            console.warn('Could not fetch BC First Nations data:', fnErr.message);
+            logger.warn('Could not fetch BC First Nations data', { error: fnErr.message });
             // Continue with US data only
           }
         }
@@ -118,7 +119,7 @@ export default function useTribalData(includeCanada = true) {
       } catch (err) {
         if (err.name !== 'AbortError') {
           setError(err.message);
-          console.error('Error fetching Tribal data:', err);
+          logger.error('Error fetching Tribal data', err);
         }
       } finally {
         setLoading(false);

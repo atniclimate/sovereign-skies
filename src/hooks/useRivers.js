@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getCache, setCache, CACHE_KEYS, CACHE_TTL } from '../services/cache';
+import { riversLogger as logger } from '../utils/logger';
 
 const RIVERS_API_URL = '/api/rivers';
 const NWPS_DIRECT_URL = 'https://api.water.noaa.gov/nwps/v1/gauges';
@@ -113,7 +114,7 @@ export default function useRivers() {
       setCache(CACHE_KEYS.RIVERS, data, CACHE_TTL.RIVERS || 300000);
 
     } catch (err) {
-      console.error('Error fetching river data:', err);
+      logger.error('Error fetching river data', err);
       setError(err.message);
     } finally {
       setLoading(false);

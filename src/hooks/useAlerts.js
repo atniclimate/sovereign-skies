@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { POLL_INTERVAL_MS } from '../utils/constants';
 import { getCache, setCache, CACHE_KEYS, CACHE_TTL } from '../services/cache';
+import { alertsLogger as logger } from '../utils/logger';
 
 const ALERTS_API_URL = '/api/alerts';
 // Include WA, OR, ID plus Pacific marine zones (PZ) for coastal coverage
@@ -179,7 +180,7 @@ function parseECPolygon(polygonStr) {
       coordinates: [coordinates]
     };
   } catch (err) {
-    console.warn('Error parsing EC polygon:', err);
+    logger.warn('Error parsing EC polygon', err);
     return null;
   }
 }
@@ -192,7 +193,7 @@ function parseECCAPFile(xmlText, province) {
 
   const parseError = doc.querySelector('parsererror');
   if (parseError) {
-    console.warn('CAP parse error');
+    logger.warn('CAP parse error');
     return [];
   }
 
@@ -289,7 +290,7 @@ function parseECCAPFile(xmlText, province) {
         });
       });
     } catch (err) {
-      console.warn('Error parsing CAP info block:', err);
+      logger.warn('Error parsing CAP info block', err);
     }
   });
 
@@ -304,7 +305,7 @@ async function getLatestCAPFiles(station, date) {
     const response = await fetch(dirUrl);
 
     if (!response.ok) {
-      console.warn(`Could not fetch CAP directory for ${station}:`, response.status);
+      logger.warn(`Could not fetch CAP directory`, { station, status: response.status });
       return [];
     }
 
@@ -315,7 +316,7 @@ async function getLatestCAPFiles(station, date) {
     const hours = hourMatches.map(m => m.match(/\d{2}/)[0]).sort().reverse();
 
     if (hours.length === 0) {
-      console.log(`No CAP hours found for ${station}`);
+      logger.debug(`No CAP hours found for station`, { station });
       return [];
     }
 
@@ -337,13 +338,13 @@ async function getLatestCAPFiles(station, date) {
           capFiles.push(`${hourUrl}${filename}`);
         }
       } catch (err) {
-        console.warn(`Error fetching hour ${hour} for ${station}:`, err);
+        logger.warn(`Error fetching hour directory`, { hour, station, error: err.message });
       }
     }
 
     return capFiles;
   } catch (err) {
-    console.warn(`Error getting CAP files for ${station}:`, err);
+    logger.warn(`Error getting CAP files for station`, { station, error: err.message });
     return [];
   }
 }
@@ -358,7 +359,7 @@ async function fetchCanadianAlerts() {
     const day = String(now.getUTCDate()).padStart(2, '0');
     const today = `${year}${month}${day}`;
 
-    console.log(`Fetching Canadian alerts for ${today}...`);
+    logger.debug(`Fetching Canadian alerts`, { date: today });
 
     // Get CAP file URLs for BC and Alberta
     const [bcFiles, abFiles] = await Promise.all([
@@ -366,7 +367,7 @@ async function fetchCanadianAlerts() {
       getLatestCAPFiles(EC_STATIONS.AB, today)
     ]);
 
-    console.log(`Found ${bcFiles.length} BC CAP files, ${abFiles.length} AB CAP files`);
+    logger.debug(`Found CAP files`, { bcFiles: bcFiles.length, abFiles: abFiles.length });
 
     // Fetch and parse CAP files
     const allAlerts = [];
@@ -388,7 +389,7 @@ async function fetchCanadianAlerts() {
           }
         }
       } catch (err) {
-        console.warn('Error fetching CAP file:', err);
+        logger.warn('Error fetching BC CAP file', { error: err.message });
       }
     }
 
@@ -408,14 +409,14 @@ async function fetchCanadianAlerts() {
           }
         }
       } catch (err) {
-        console.warn('Error fetching CAP file:', err);
+        logger.warn('Error fetching AB CAP file', { error: err.message });
       }
     }
 
-    console.log(`Loaded ${allAlerts.length} Canadian alerts from MSC Datamart`);
+    logger.info(`Loaded Canadian alerts from MSC Datamart`, { count: allAlerts.length });
     return allAlerts;
   } catch (err) {
-    console.warn('Error fetching Canadian alerts:', err);
+    logger.warn('Error fetching Canadian alerts', err);
     return [];
   }
 }
@@ -492,7 +493,7 @@ async function transformNWSResponse(data) {
       if (!geometry && props.affectedZones?.length > 0) {
         geometry = await fetchCombinedZoneGeometry(props.affectedZones);
         if (geometry) {
-          console.log(`Fetched geometry for: ${props.event} (${props.affectedZones.length} zones)`);
+          logger.debug(`Fetched geometry for alert`, { event: props.event, zones: props.affectedZones.length });
         }
       }
 
@@ -598,7 +599,7 @@ export default function useAlerts(includeCanada = true) {
       }, CACHE_TTL.ALERTS);
 
     } catch (err) {
-      console.error('Error fetching alerts:', err);
+      logger.error('Error fetching alerts', err);
       setError(err.message);
 
       const cached = getCache(CACHE_KEYS.ALERTS);

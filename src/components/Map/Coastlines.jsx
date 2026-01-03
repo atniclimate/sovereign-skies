@@ -1,6 +1,7 @@
 import { GeoJSON } from 'react-leaflet';
 import { useEffect, useState } from 'react';
 import { COASTLINE_URL, COASTLINE_STYLE } from '../../utils/constants';
+import { mapLogger as logger } from '../../utils/logger';
 
 export default function Coastlines() {
   const [data, setData] = useState(null);
@@ -9,7 +10,7 @@ export default function Coastlines() {
     fetch(COASTLINE_URL)
       .then(res => res.json())
       .then(geojson => setData(geojson))
-      .catch(err => console.warn('Failed to load coastlines:', err));
+      .catch(err => logger.warn('Failed to load coastlines', err));
   }, []);
 
   if (!data) return null;

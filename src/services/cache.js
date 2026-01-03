@@ -3,6 +3,8 @@
  * Provides caching with TTL for alerts and other data
  */
 
+import { cacheLogger as logger } from '../utils/logger';
+
 const CACHE_PREFIX = 'tw_';
 
 /**
@@ -24,7 +26,7 @@ export function getCache(key) {
 
     return value;
   } catch (error) {
-    console.warn('Cache read error:', error);
+    logger.warn('Cache read error', error);
     return null;
   }
 }
@@ -43,7 +45,7 @@ export function setCache(key, value, ttlMs) {
     };
     localStorage.setItem(CACHE_PREFIX + key, JSON.stringify(item));
   } catch (error) {
-    console.warn('Cache write error:', error);
+    logger.warn('Cache write error', error);
     // If storage is full, clear old items
     if (error.name === 'QuotaExceededError') {
       clearExpiredCache();
@@ -59,7 +61,7 @@ export function removeCache(key) {
   try {
     localStorage.removeItem(CACHE_PREFIX + key);
   } catch (error) {
-    console.warn('Cache remove error:', error);
+    logger.warn('Cache remove error', error);
   }
 }
 
@@ -85,7 +87,7 @@ export function clearExpiredCache() {
       }
     }
   } catch (error) {
-    console.warn('Cache clear error:', error);
+    logger.warn('Cache clear error', error);
   }
 }
 
@@ -97,7 +99,7 @@ export function clearAllCache() {
     const keys = Object.keys(localStorage).filter(k => k.startsWith(CACHE_PREFIX));
     keys.forEach(key => localStorage.removeItem(key));
   } catch (error) {
-    console.warn('Cache clear all error:', error);
+    logger.warn('Cache clear all error', error);
   }
 }
 

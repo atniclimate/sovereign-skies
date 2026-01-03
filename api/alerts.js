@@ -1,5 +1,9 @@
 // Vercel Serverless Function: /api/alerts
 // Proxies NWS API for weather alerts with zone geometries
+// Security: Uses origin whitelist CORS (H-1), sanitized errors (H-2)
+
+import { setCorsHeaders, createErrorResponse } from './_utils/cors.js';
+import { alertsLogger as logger } from './_utils/logger.js';
 
 const NWS_BASE_URL = 'https://api.weather.gov';
 const PNW_STATES = ['WA', 'OR', 'ID'];
@@ -53,7 +57,7 @@ async function fetchZoneGeometry(zoneUrl) {
 
     return geometry;
   } catch (err) {
-    console.error(`Failed to fetch zone ${zoneUrl}:`, err.message);
+    logger.warn(`Failed to fetch zone geometry`, { url: zoneUrl, error: err.message });
     return null;
   }
 }
@@ -112,15 +116,15 @@ async function parseAlert(feature) {
 }
 
 export default async function handler(req, res) {
-  // CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=30');
+  // Security headers (H-1: origin whitelist CORS)
+  const shouldContinue = setCorsHeaders(req, res, {
+    allowMethods: 'GET, OPTIONS',
+    allowHeaders: 'Content-Type',
+  });
+  if (!shouldContinue) return; // Preflight handled
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+  // Cache headers
+  res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=30');
 
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -171,10 +175,10 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    console.error('Error fetching NWS alerts:', error);
-    return res.status(500).json({
-      error: 'Failed to fetch alerts',
-      message: error.message
-    });
+    logger.error('Failed to fetch NWS alerts', error);
+    // H-2: Sanitized error response - hides implementation details in production
+    return res.status(500).json(
+      createErrorResponse(error, 'Failed to fetch weather alerts')
+    );
   }
 }

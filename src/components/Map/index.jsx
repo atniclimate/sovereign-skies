@@ -18,7 +18,7 @@ import AlertZones from './AlertZones';
 import RiverGauges from './RiverGauges';
 import RadarLayer from './RadarLayer';
 import MarineLayer from './MarineLayer';
-import AlertList from '../UI/AlertList';
+import AlertList from '../ui/AlertList';
 import useTribalData from '../../hooks/useTribalData';
 import useAlerts from '../../hooks/useAlerts';
 import useRivers from '../../hooks/useRivers';

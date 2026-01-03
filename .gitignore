@@ -10,7 +10,18 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+
+# Environment variables (H-3: Never commit secrets)
+.env
+.env.*
+!.env.example
 *.local
+
+# Secrets and credentials
+*.pem
+*.key
+credentials.json
+secrets.yaml
 
 # Editor directories and files
 .vscode/*

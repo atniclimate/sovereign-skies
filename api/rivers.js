@@ -1,5 +1,9 @@
 // Vercel Serverless Function: /api/rivers
 // Fetches river gauge data from NWPS API for PNW states
+// Security: Uses origin whitelist CORS (H-1), sanitized errors (H-2)
+
+import { setCorsHeaders, createErrorResponse } from './_utils/cors.js';
+import { riversLogger as logger } from './_utils/logger.js';
 
 const NWPS_BASE_URL = 'https://api.water.noaa.gov/nwps/v1';
 const PNW_STATES = ['WA', 'OR', 'ID'];
@@ -18,15 +22,15 @@ const FLOOD_PRIORITY = {
 };
 
 export default async function handler(req, res) {
-  // CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=60');
+  // Security headers (H-1: origin whitelist CORS)
+  const shouldContinue = setCorsHeaders(req, res, {
+    allowMethods: 'GET, OPTIONS',
+    allowHeaders: 'Content-Type',
+  });
+  if (!shouldContinue) return; // Preflight handled
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+  // Cache headers
+  res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=60');
 
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -44,7 +48,7 @@ export default async function handler(req, res) {
         });
 
         if (!response.ok) {
-          console.error(`Failed to fetch gauges for ${state}: ${response.status}`);
+          logger.warn(`Failed to fetch gauges for state`, { state, status: response.status });
           return [];
         }
 
@@ -104,10 +108,10 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    console.error('Error fetching river gauges:', error);
-    return res.status(500).json({
-      error: 'Failed to fetch river data',
-      message: error.message
-    });
+    logger.error('Failed to fetch river gauges', error);
+    // H-2: Sanitized error response - hides implementation details in production
+    return res.status(500).json(
+      createErrorResponse(error, 'Failed to fetch river gauge data')
+    );
   }
 }

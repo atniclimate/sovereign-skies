@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getCache, setCache, CACHE_KEYS, CACHE_TTL } from '../services/cache';
+import { marineLogger as logger } from '../utils/logger';
 import {
   NDBC_REALTIME_URL,
   COOPS_API_URL,
@@ -85,14 +86,14 @@ async function fetchBuoyData(station) {
     const response = await fetch(url);
 
     if (!response.ok) {
-      console.warn(`NDBC station ${station.id} returned ${response.status}`);
+      logger.warn(`NDBC station unavailable`, { id: station.id, status: response.status });
       return null;
     }
 
     const text = await response.text();
     return parseNDBCData(text, station);
   } catch (err) {
-    console.warn(`Error fetching buoy ${station.id}:`, err.message);
+    logger.warn(`Error fetching buoy`, { id: station.id, error: err.message });
     return null;
   }
 }
@@ -128,14 +129,14 @@ async function fetchTidePredictions(station) {
     const response = await fetch(`${COOPS_API_URL}?${params}`);
 
     if (!response.ok) {
-      console.warn(`CO-OPS station ${station.id} returned ${response.status}`);
+      logger.warn(`CO-OPS station unavailable`, { id: station.id, status: response.status });
       return null;
     }
 
     const data = await response.json();
 
     if (data.error) {
-      console.warn(`CO-OPS error for ${station.id}:`, data.error.message);
+      logger.warn(`CO-OPS API error`, { id: station.id, error: data.error.message });
       return null;
     }
 
@@ -161,7 +162,7 @@ async function fetchTidePredictions(station) {
       timestamp: new Date().toISOString()
     };
   } catch (err) {
-    console.warn(`Error fetching tides for ${station.id}:`, err.message);
+    logger.warn(`Error fetching tides`, { id: station.id, error: err.message });
     return null;
   }
 }
@@ -284,7 +285,7 @@ export default function useMarineConditions(enabled = true) {
       }, CACHE_TTL.MARINE_TIDES);
 
     } catch (err) {
-      console.error('Error fetching marine data:', err);
+      logger.error('Error fetching marine data', err);
       setError(err.message);
 
       // Fall back to cache
